@@ -10,9 +10,10 @@ from mujoco import mjx
 
 # Set up paths
 MODEL_ROOT_PATH = epath.Path(epath.resource_path('mujoco')) / 'mjx/test_data/humanoid'
+NUM_STEPS = 10000
 
 # Create a benchmark function for standard MuJoCo on CPU
-def benchmark_mujoco_cpu(steps=100):
+def benchmark_mujoco_cpu(steps=NUM_STEPS):
     # Load the humanoid model
     mj_model = mujoco.MjModel.from_xml_path(
         (MODEL_ROOT_PATH / 'humanoid.xml').as_posix())
@@ -44,7 +45,7 @@ def benchmark_mujoco_cpu(steps=100):
     }
 
 # Create a benchmark function for MJX on CPU
-def benchmark_mjx_cpu(batch_size=1, steps=100):
+def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
     # Force JAX to use CPU
     with jax.default_device(jax.devices('cpu')[0]):
         # Load the humanoid model
@@ -110,7 +111,7 @@ def benchmark_mjx_cpu(batch_size=1, steps=100):
             }
 
 # Create a benchmark function for MJX on GPU
-def benchmark_mjx_gpu(batch_size, steps=100):
+def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
     # Load the humanoid model
     mj_model = mujoco.MjModel.from_xml_path(
         (MODEL_ROOT_PATH / 'humanoid.xml').as_posix())
@@ -245,7 +246,8 @@ def run_benchmarks():
     print("\nRunning MJX CPU benchmarks...")
     mjx_cpu_results = []
     cpu_batch_sizes = [
-        # 1, 2, 4, 8
+        # 1, 2, 4, 
+        8
         ]
     
     for batch_size in cpu_batch_sizes:
@@ -267,7 +269,7 @@ def run_benchmarks():
     # Run MJX GPU benchmarks with different batch sizes
     print("\nRunning MJX GPU benchmarks...")
     mjx_gpu_results = []
-    gpu_batch_sizes = [64, 128, 256, 512]
+    gpu_batch_sizes = [32]
     
     for batch_size in gpu_batch_sizes:
         print(f"  Batch size: {batch_size}")
