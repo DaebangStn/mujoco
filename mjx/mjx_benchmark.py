@@ -48,6 +48,9 @@ def benchmark_mujoco_cpu(steps=NUM_STEPS):
 def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
     # Force JAX to use CPU
     with jax.default_device(jax.devices('cpu')[0]):
+        # Measure compilation time separately
+        compilation_start = time.time()
+        
         # Load the humanoid model
         mj_model = mujoco.MjModel.from_xml_path(
             (MODEL_ROOT_PATH / 'humanoid.xml').as_posix())
@@ -74,9 +77,6 @@ def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
             
             # Stack the states into a batch
             batch = jax.tree_util.tree_map(lambda *xs: jp.stack(xs), *batch_states)
-            
-            # Measure compilation time separately
-            compilation_start = time.time()
             
             # Compile the step function
             jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
@@ -121,6 +121,9 @@ def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
 
 # Create a benchmark function for MJX on GPU
 def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
+    # Measure compilation time separately
+    compilation_start = time.time()
+    
     # Load the humanoid model
     mj_model = mujoco.MjModel.from_xml_path(
         (MODEL_ROOT_PATH / 'humanoid.xml').as_posix())
@@ -178,9 +181,6 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
         
         # Stack the states into a batch
         batch = jax.tree_util.tree_map(lambda *xs: jp.stack(xs), *batch_states)
-        
-        # Measure compilation time separately
-        compilation_start = time.time()
                 
         # Compile the step function
         jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
