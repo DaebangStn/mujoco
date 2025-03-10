@@ -75,12 +75,19 @@ def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
             # Stack the states into a batch
             batch = jax.tree_util.tree_map(lambda *xs: jp.stack(xs), *batch_states)
             
+            # Measure compilation time separately
+            compilation_start = time.time()
+            
             # Compile the step function
             jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
             
             # Warm-up JIT compilation
             batch = jit_step(mjx_model, batch)
-            
+            batch.qpos.block_until_ready()  # Ensure compilation is complete
+            compilation_end = time.time()
+            compilation_time = compilation_end - compilation_start
+            print(f"    Compilation time: {compilation_time:.4f} seconds")
+                        
             # Benchmark
             start_time = time.time()
             for _ in range(steps):
@@ -89,6 +96,8 @@ def benchmark_mjx_cpu(batch_size=1, steps=NUM_STEPS):
             end_time = time.time()
             
             total_time = end_time - start_time
+            print(f"    Total time: {total_time:.4f} seconds (compilation ratio: {compilation_time / total_time:.2f})")
+            
             steps_per_second = steps * batch_size / total_time
             
             return {
@@ -170,11 +179,11 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
         # Stack the states into a batch
         batch = jax.tree_util.tree_map(lambda *xs: jp.stack(xs), *batch_states)
         
-        # Compile the step function
-        jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
-        
         # Measure compilation time separately
         compilation_start = time.time()
+                
+        # Compile the step function
+        jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
         try:
             # Warm-up JIT compilation
             batch = jit_step(mjx_model, batch)
@@ -205,6 +214,7 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
         
         execution_time = execution_end - execution_start
         total_time = compilation_time + execution_time
+        print(f"    Total time: {total_time:.4f} seconds (compilation ratio: {compilation_time / total_time:.2f})")
         steps_per_second = steps * batch_size / execution_time  # Use execution time only
         
         return {
