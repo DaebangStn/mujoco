@@ -249,11 +249,24 @@ def run_benchmarks():
     # Tell XLA to use Triton GEMM, this improves steps/sec by ~30% on some GPUs
     xla_flags = os.environ.get('XLA_FLAGS', '')
     xla_flags += ' --xla_gpu_triton_gemm_any=True'
+    
+    # Add flag to disable buffer comparison warnings
+    xla_flags += ' --xla_gpu_enable_triton_softmax_fusion=false'
+    xla_flags += ' --xla_gpu_exhaustive_tiling=false'
+    xla_flags += ' --xla_gpu_enable_async_collectives=false'
+    xla_flags += ' --xla_gpu_enable_latency_hiding_scheduler=false'
+    xla_flags += ' --xla_gpu_enable_triton_gemm=false'
+    
     os.environ['XLA_FLAGS'] = xla_flags
     
     # Set XLA to use CUDA data directory for caching
-    os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/tmp/xla_cache'
+    os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
     os.environ['JAX_ENABLE_X64'] = 'True'  # Consistent precision
+    
+    # Suppress JAX buffer comparison warnings
+    import logging
+    logging.getLogger('jax._src.lib.xla_bridge').setLevel(logging.ERROR)
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     
     print("\nNote: You may see 'Results do not match the reference' warnings during benchmarking.")
     print("These are part of JAX's GPU kernel autotuning process and indicate small numerical")
@@ -276,7 +289,7 @@ def run_benchmarks():
     mjx_cpu_results = []
     cpu_batch_sizes = [
         # 1, 2, 4, 
-        8
+        1, 8, 32
         ]
     
     for batch_size in cpu_batch_sizes:
@@ -298,7 +311,7 @@ def run_benchmarks():
     # Run MJX GPU benchmarks with different batch sizes
     print("\nRunning MJX GPU benchmarks...")
     mjx_gpu_results = []
-    gpu_batch_sizes = [32]
+    gpu_batch_sizes = [32, 128, 512]
     
     for batch_size in gpu_batch_sizes:
         print(f"  Batch size: {batch_size}")
