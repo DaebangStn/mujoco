@@ -250,13 +250,7 @@ def run_benchmarks():
     xla_flags = os.environ.get('XLA_FLAGS', '')
     xla_flags += ' --xla_gpu_triton_gemm_any=True'
     
-    # Add flag to disable buffer comparison warnings
-    xla_flags += ' --xla_gpu_enable_triton_softmax_fusion=false'
-    xla_flags += ' --xla_gpu_exhaustive_tiling=false'
-    xla_flags += ' --xla_gpu_enable_async_collectives=false'
-    xla_flags += ' --xla_gpu_enable_latency_hiding_scheduler=false'
-    xla_flags += ' --xla_gpu_enable_triton_gemm=false'
-    
+    # Only add flags that are known to be safe
     os.environ['XLA_FLAGS'] = xla_flags
     
     # Set XLA to use CUDA data directory for caching
@@ -267,6 +261,9 @@ def run_benchmarks():
     import logging
     logging.getLogger('jax._src.lib.xla_bridge').setLevel(logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    
+    # Disable JAX buffer donation checker which can cause warnings
+    os.environ['JAX_DISABLE_JIT_DEVICE_ASSIGNMENT_CHECK'] = '1'
     
     print("\nNote: You may see 'Results do not match the reference' warnings during benchmarking.")
     print("These are part of JAX's GPU kernel autotuning process and indicate small numerical")
