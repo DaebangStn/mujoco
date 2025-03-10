@@ -10,7 +10,7 @@ from mujoco import mjx
 
 # Set up paths
 MODEL_ROOT_PATH = epath.Path(epath.resource_path('mujoco')) / 'mjx/test_data/humanoid'
-NUM_STEPS = 10000
+NUM_STEPS = 100000
 
 # Create a benchmark function for standard MuJoCo on CPU
 def benchmark_mujoco_cpu(steps=NUM_STEPS):
@@ -285,8 +285,7 @@ def run_benchmarks():
     print("\nRunning MJX CPU benchmarks...")
     mjx_cpu_results = []
     cpu_batch_sizes = [
-        # 1, 2, 4, 
-        1, 8, 32
+        1, 8, 32, 128,
         ]
     
     for batch_size in cpu_batch_sizes:
@@ -308,7 +307,7 @@ def run_benchmarks():
     # Run MJX GPU benchmarks with different batch sizes
     print("\nRunning MJX GPU benchmarks...")
     mjx_gpu_results = []
-    gpu_batch_sizes = [32, 128, 512]
+    gpu_batch_sizes = [32, 128, 512, 1024, 2048, 4096]
     
     for batch_size in gpu_batch_sizes:
         print(f"  Batch size: {batch_size}")
@@ -405,4 +404,37 @@ def run_benchmarks():
 # """)
 
 if __name__ == "__main__":
-    run_benchmarks()
+    import sys
+    
+    # Use a default log file name
+    log_file = "benchmark_results.log"
+    
+    # Create a custom class that writes to both stdout and the log file
+    class Tee:
+        def __init__(self, file_path):
+            self.file = open(file_path, 'w')
+            self.stdout = sys.stdout
+            
+        def write(self, data):
+            self.file.write(data)
+            self.stdout.write(data)
+            
+        def flush(self):
+            self.file.flush()
+            self.stdout.flush()
+            
+        def close(self):
+            self.file.close()
+    
+    # Redirect stdout to our Tee object
+    tee = Tee(log_file)
+    original_stdout = sys.stdout
+    sys.stdout = tee
+    
+    try:
+        run_benchmarks()
+    finally:
+        # Restore stdout and close the file
+        sys.stdout = original_stdout
+        tee.close()
+        print(f"Benchmark results saved to {log_file}")
