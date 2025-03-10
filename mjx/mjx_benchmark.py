@@ -1,3 +1,4 @@
+import os
 import time
 import numpy as np
 import jax
@@ -10,7 +11,7 @@ from mujoco import mjx
 
 # Set up paths
 MODEL_ROOT_PATH = epath.Path(epath.resource_path('mujoco')) / 'mjx/test_data/humanoid'
-NUM_STEPS = 100000
+NUM_STEPS = 10000
 
 # Create a benchmark function for standard MuJoCo on CPU
 def benchmark_mujoco_cpu(steps=NUM_STEPS):
@@ -408,6 +409,10 @@ if __name__ == "__main__":
     
     # Use a default log file name
     log_file = "benchmark_results.log"
+    
+    # If the log file already exists, delete it
+    if os.path.exists(log_file):
+        os.remove(log_file)
     
     # Create a custom class that writes to both stdout and the log file
     class Tee:
