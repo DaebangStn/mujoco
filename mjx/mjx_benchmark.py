@@ -137,6 +137,8 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
             'platform': 'MJX GPU',
             'batch_size': batch_size,
             'total_time': float('nan'),
+            'compilation_time': float('nan'),
+            'execution_time': float('nan'),
             'steps': steps,
             'steps_per_second': 0,
             'environments_per_second': 0
@@ -171,9 +173,12 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
         # Compile the step function
         jit_step = jax.jit(jax.vmap(mjx.step, in_axes=(None, 0)))
         
-        # Warm-up JIT compilation
+        # Measure compilation time separately
+        compilation_start = time.time()
         try:
+            # Warm-up JIT compilation
             batch = jit_step(mjx_model, batch)
+            batch.qpos.block_until_ready()  # Ensure compilation is complete
         except Exception as e:
             print(f"Error during warm-up: {e}")
             print(f"Batch size {batch_size} is too large for available GPU memory.")
@@ -181,25 +186,33 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
                 'platform': 'MJX GPU',
                 'batch_size': batch_size,
                 'total_time': float('nan'),
+                'compilation_time': float('nan'),
+                'execution_time': float('nan'),
                 'steps': steps,
                 'steps_per_second': 0,
                 'environments_per_second': 0
             }
+        compilation_end = time.time()
+        compilation_time = compilation_end - compilation_start
+        print(f"    Compilation time: {compilation_time:.4f} seconds")
         
-        # Benchmark
-        start_time = time.time()
+        # Benchmark execution only (post-compilation)
+        execution_start = time.time()
         for _ in range(steps):
             batch = jit_step(mjx_model, batch)
             batch.qpos.block_until_ready()  # Force execution to complete
-        end_time = time.time()
+        execution_end = time.time()
         
-        total_time = end_time - start_time
-        steps_per_second = steps * batch_size / total_time
+        execution_time = execution_end - execution_start
+        total_time = compilation_time + execution_time
+        steps_per_second = steps * batch_size / execution_time  # Use execution time only
         
         return {
             'platform': 'MJX GPU',
             'batch_size': batch_size,
             'total_time': total_time,
+            'compilation_time': compilation_time,
+            'execution_time': execution_time,
             'steps': steps,
             'steps_per_second': steps_per_second,
             'environments_per_second': steps_per_second
@@ -210,6 +223,8 @@ def benchmark_mjx_gpu(batch_size, steps=NUM_STEPS):
             'platform': 'MJX GPU',
             'batch_size': batch_size,
             'total_time': float('nan'),
+            'compilation_time': float('nan'),
+            'execution_time': float('nan'),
             'steps': steps,
             'steps_per_second': 0,
             'environments_per_second': 0
@@ -225,6 +240,10 @@ def run_benchmarks():
     xla_flags = os.environ.get('XLA_FLAGS', '')
     xla_flags += ' --xla_gpu_triton_gemm_any=True'
     os.environ['XLA_FLAGS'] = xla_flags
+    
+    # Set XLA to use CUDA data directory for caching
+    os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/tmp/xla_cache'
+    os.environ['JAX_ENABLE_X64'] = 'True'  # Consistent precision
     
     print("\nNote: You may see 'Results do not match the reference' warnings during benchmarking.")
     print("These are part of JAX's GPU kernel autotuning process and indicate small numerical")
@@ -315,15 +334,18 @@ def run_benchmarks():
     plt.savefig('physics_engine_comparison.png')
     plt.close()
     
-    # Create a summary table
-    print("\nBenchmark Results Summary:")
-    print("-" * 100)
-    print(f"{'Platform':^15} | {'Batch Size':^10} | {'Total Time (s)':^15} | {'Steps':^8} | {'Steps/Sec':^12} | {'Envs/Sec':^12}")
-    print("-" * 100)
+    # Create a summary table with compilation time
+    print("\nBenchmark Results Summary (with compilation time):")
+    print("-" * 120)
+    print(f"{'Platform':^15} | {'Batch Size':^10} | {'Compilation (s)':^15} | {'Execution (s)':^15} | {'Total (s)':^15} | {'Steps/Sec':^12} | {'Envs/Sec':^12}")
+    print("-" * 120)
     
     for r in all_results:
-        if not np.isnan(r['total_time']):
-            print(f"{r['platform']:^15} | {r['batch_size']:^10} | {r['total_time']:^15.4f} | {r['steps']:^8} | {r['steps_per_second']:^12.2f} | {r['environments_per_second']:^12.2f}")
+        if not np.isnan(r.get('total_time', float('nan'))):
+            comp_time = r.get('compilation_time', 0)
+            exec_time = r.get('execution_time', r.get('total_time', 0))
+            total_time = r.get('total_time', exec_time)
+            print(f"{r['platform']:^15} | {r['batch_size']:^10} | {comp_time:^15.4f} | {exec_time:^15.4f} | {total_time:^15.4f} | {r['steps_per_second']:^12.2f} | {r['environments_per_second']:^12.2f}")
     
     # Calculate speedups
     mujoco_cpu_speed = mujoco_cpu_result['environments_per_second']
@@ -339,28 +361,28 @@ def run_benchmarks():
             print(f"{r['platform']:^15} | {r['batch_size']:^10} | {speedup:^10.2f}x")
     
     # Print conclusions
-    print("""
-Performance Comparison Conclusions:
+#     print("""
+# Performance Comparison Conclusions:
 
-1. Single Environment Performance: 
-   - MuJoCo CPU provides a baseline for single environment simulation.
-   - MJX on CPU for a single environment may have overhead from JAX compilation.
-   - MJX on GPU for a single environment shows the overhead of GPU data transfer.
+# 1. Single Environment Performance: 
+#    - MuJoCo CPU provides a baseline for single environment simulation.
+#    - MJX on CPU for a single environment may have overhead from JAX compilation.
+#    - MJX on GPU for a single environment shows the overhead of GPU data transfer.
 
-2. Batch Processing Advantage:
-   - MJX on GPU shows dramatic performance improvements with increasing batch size.
-   - MJX on CPU also benefits from vectorization but with more modest gains.
+# 2. Batch Processing Advantage:
+#    - MJX on GPU shows dramatic performance improvements with increasing batch size.
+#    - MJX on CPU also benefits from vectorization but with more modest gains.
 
-3. Scaling Characteristics:
-   - MJX GPU demonstrates near-linear scaling with batch size up to memory limits.
-   - The crossover point where MJX GPU outperforms CPU implementations occurs at 
-     relatively small batch sizes.
+# 3. Scaling Characteristics:
+#    - MJX GPU demonstrates near-linear scaling with batch size up to memory limits.
+#    - The crossover point where MJX GPU outperforms CPU implementations occurs at 
+#      relatively small batch sizes.
 
-4. Practical Applications:
-   - For single-environment simulation, traditional MuJoCo may be sufficient.
-   - For RL training and other parallel simulation workloads, MJX on GPU offers 
-     substantial performance benefits.
-""")
+# 4. Practical Applications:
+#    - For single-environment simulation, traditional MuJoCo may be sufficient.
+#    - For RL training and other parallel simulation workloads, MJX on GPU offers 
+#      substantial performance benefits.
+# """)
 
 if __name__ == "__main__":
     run_benchmarks()
